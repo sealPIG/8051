@@ -1,0 +1,112 @@
+	; Play a song
+	ORG 00H
+	AJMP START
+	ORG 0BH
+	AJMP TIMER0
+	; initialization
+	START:
+	; initialize SP
+	MOV SP,#60H
+	; initialize timer
+	MOV R4,#50 ; 0.5 seconds timeout
+	MOV R5,#100
+	MOV TMOD,#2 ; Timer 0, Mode 2
+	MOV TH0,#156 ; timer is called every 100 us
+	MOV TL0,#156 ; auto load 100us
+	; Enable interrupt
+	SETB EA ; Enable interrupt
+	SETB ET0 ; Enable Timer0 interrupt
+	;Play the song repeatedly
+LOOP:
+	MOV R0,#0 ; set tone position R0 = 0
+NEXT:
+	CLR F0
+	; Get current tone
+	MOV A,R0
+	MOV DPTR,#TONE
+	MOVC A,@A+DPTR
+	MOV R1,A ; R1 = tone
+	XRL A,#0
+	JZ LOOP ; if A =0, Goto LOOP
+	; Get current beat
+	MOV A,R0
+	MOV DPTR,#BEAT
+	MOVC A,@A+DPTR
+	MOV R2,A ; R2 = BEAT
+	; Get frequency data
+	MOV A,R1
+	DEC A
+	MOV DPTR,#TABLE
+	MOVC A,@A+DPTR
+	MOV R3,A ; R3 = Frequency Data
+	; Enable timer 0
+	SETB TR0
+	; Wait for timer 0 to time out
+S1: 
+	ACALL PULSE ; Send a pulse of current tone
+	JNB F0,S1 ; If not timeout goto S1
+	CLR TR0
+	ACALL MUTE ; Wait 0.1 Second
+	INC R0
+	SJMP NEXT
+	; Send a pulse with the frequency of current tone to speaker
+PULSE: 
+	MOV A,R3
+	SETB P2.3 ; open speaker
+	ACALL DELAY
+	MOV A,R3
+	CLR P2.3 ; close speaker
+	ACALL DELAY
+	RET
+; Keep mute for 0.1 Second
+MUTE: 
+	MOV R6,#100
+S2: 
+	MOV R7,#250
+	DJNZ R7,$
+	DJNZ R6,S2
+	RET
+	; Delay Acc * 20us
+DELAY: 
+	NOP ; 1 us
+	MOV R7,#8 ; 1 us
+	DJNZ R7,$ ; 2 us * 8
+	DJNZ ACC,DELAY ; 2 us
+	RET
+; Timer 0 ISP
+; Set F0 to 1 when the time (0.5s) is up
+TIMER0: 
+	CLR TR0
+	DJNZ R5,EXIT
+	MOV R5,#100
+	DJNZ R4,EXIT
+	MOV R4,#50
+	DJNZ R2,EXIT
+	SETB F0
+EXIT: 
+	SETB TR0
+	RETI
+	; Table of tones
+TONE: 
+	DB 5,3,3, 4,2,2, 1,2,3,4,5,5,5
+	DB 5,3,3, 4,2,2, 1,3,5,5,3
+	DB 2,2,2,2, 2,3,4, 3,3,3,3,3,4,5
+	DB 5,3,3, 4,2,2, 1,3,5,5,1
+	DB 0
+	; Table of beats, 1 beat = 0.5 second
+BEAT: 
+	DB 1,1,2, 1,1,2, 1,1,1,1,1,1,2
+	DB 1,1,2, 1,1,2, 1,1,1,1,4
+	DB 1,1,1,1, 1,1,2, 1,1,1,1,1,1,2
+	DB 1,1,2, 1,1,2, 1,1,1,1,4
+	; Frequency data of tones
+TABLE: 
+	DB 48 ;1
+	DB 43 ;2
+	DB 38 ;3
+	DB 36 ;4
+	DB 32 ;5
+	DB 28 ;6
+	DB 25 ;7
+	DB 24 ;8
+	END
