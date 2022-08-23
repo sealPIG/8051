@@ -1,0 +1,44 @@
+	ORG 0000H
+	AJMP START
+	;Interrupt Vectors
+	ORG 0003H ;INT0
+	AJMP ISP_INT0
+	;Main Program
+START:
+	; Initialization
+	MOV SP, #30H ;SET SP = 30H
+	MOV A, #0 ; ACC = 0
+	; Setting Interrupt
+	SETB IT0 ; IT0 = Edge Trigger
+	SETB EX0 ; Enable int0
+	SETB EA ; Enable Interrupt
+LOOP: 
+	MOV P1, A ; Show LED
+	CALL DELAY ; Delay
+	CPL A ; A = ~A
+	AJMP LOOP
+ISP_INT0:
+	PUSH PSW ;Save Registers
+	PUSH ACC
+	SETB RS0 ;Change to RB1
+	MOV R0, #3 ;R0 = 3
+INT0_LP0:
+	MOV A, #0FEH ;Initial value of LED
+	MOV R1, #8 ;R1 = 8
+INT0_LP1:
+	MOV P1, A ;Show LED
+	CALL DELAY
+	RL A ;Rotate A left
+	DJNZ R1, INT0_LP1 ;R1--, if R1 != 0 goto INT_LP1
+	DJNZ R0, INT0_LP0 ;R0--, if R0 != 0 goto INT_LP0
+	POP ACC ;Restore Registers
+	POP PSW
+	RETI
+DELAY: ; Delay 1 ms
+	MOV R7, #200
+D1: 
+	MOV R6, #250
+	DJNZ R6, $
+	DJNZ R7, D1
+	RET
+	END
