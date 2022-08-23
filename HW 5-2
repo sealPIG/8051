@@ -1,0 +1,138 @@
+; Constants
+	V_SP EQU 60H ; LCD Module HD44780
+	LCM_RS EQU P2.1
+	LCM_E EQU P2.0
+	LCM_DB EQU P1
+	
+; Commands on LCM_DB, RS = 0
+	CLR_DSP EQU 01H	 ;
+	RLT_HOME EQU 02H ;00000010
+	ENT_MODE EQU 06H ;00000110 => 000001, I/D = 1, S = 0
+	DSP_ON EQU 0CH ;00001 DCB, Display on, Cursor on, Blink on
+	DSP_OFF EQU 08H ;
+	CD_SHIFT EQU 1CH ;0001 S/C R/L * *, S/C = S, R/L = R
+	FUN_SET EQU 38H ;001 DL N F * *, 8-bit, 2-line
+	SET_CG_ADR EQU 40H ;01 AAAAAA
+	SET_DD_ADR EQU 80H ;1 AAAAAAA
+	; DATA on LCM_DB, RS = 1
+	PLACE1 EQU 7FH
+	PLACE2 EQU 0D0H
+	
+	
+; Codes
+	ORG 00H
+	MOV SP, #V_SP
+	CALL LCM_INIT
+	MOV A, #DSP_ON ;Display on : 00001111B
+	CALL SEND_CMD
+
+START:
+	MOV R3,#PLACE1
+	MOV R4,#PLACE2
+	
+COUNTER:
+	CALL delay_75ms
+	MOV A, #CLR_DSP
+	CALL SEND_CMD
+
+	INC R3
+	DEC R4
+	
+	MOV A,R3
+	CALL SEND_CMD
+	MOV DPTR, #STRING1
+	MOV R1,#0
+	CJNE R3,#95H,LOOP1
+	AJMP START
+	
+COUNTER2:
+	MOV A,R4
+	CALL SEND_CMD
+	MOV DPTR, #STRING2
+	MOV R1,#0
+	AJMP LOOP2
+	
+LOOP1:
+	MOV A, R1
+	MOVC A, @A+DPTR ; move data pointed to by R1 to A
+	JZ COUNTER2 ; if A is 0, jump out of loop
+	MOV LCM_DB, A ; Send DATA
+	CALL SEND_DATA
+	INC R1 ; point to next piece of data
+	JMP LOOP1 ; repeat
+	
+LOOP2:
+	MOV A, R1
+	MOVC A, @A+DPTR
+	JZ COUNTER
+	MOV LCM_DB, A
+	CALL SEND_DATA
+	INC R1
+	JMP LOOP2
+	
+; Data		1234567890123456789112345678921234567893
+STRING1: DB "HELLO"
+		 DB 0
+STRING2: DB "WORLD"
+		 DB 0
+; LCM initialization
+LCM_INIT:
+	CALL delay_15ms ;Wait more than 15ms after power on
+	MOV A, #FUN_SET ;Function Set : 0011****B
+	CALL SEND_CMD
+	CALL delay_5ms ;Wait more than 4.1ms
+	MOV A, #FUN_SET ;Function Set : 0011****B
+	CALL SEND_CMD
+	MOV A, #FUN_SET ;Function Set : 0011****B
+	CALL SEND_CMD
+	MOV A, #FUN_SET ;Function Set : 0011NF**B
+	CALL SEND_CMD
+	MOV A, #DSP_OFF ;Display Off : 00001000B
+	CALL SEND_CMD
+	MOV A, #CLR_DSP ;Clear Display : 00000001B
+	CALL SEND_CMD
+	MOV A, #ENT_MODE ;Entry mode : 00000110B
+	CALL SEND_CMD
+	RET
+	
+SEND_CMD:
+	CLR LCM_RS
+	MOV LCM_DB, A
+	SETB LCM_E ; E = H -> L
+	CLR LCM_E ;
+	CALL delay_2ms ; wait for BF to clear
+	RET
+	
+SEND_DATA:
+	SETB LCM_RS
+	MOV LCM_DB, A
+	SETB LCM_E ; E = H -> L
+	CLR LCM_E ;
+	CALL delay_50us ; wait for BF to clear
+	RET
+	
+; Functions for delay a period of time
+delay_75ms: MOV R5,#13
+L1_75ms: CALL delay_5ms
+	DJNZ R5,L1_75ms
+	RET
+
+delay_15ms: MOV R5,#3
+L1_15ms: CALL delay_5ms
+	DJNZ R5,L1_15ms
+	RET
+	
+delay_5ms: MOV R6,#100
+L1_5ms: CALL delay_50us
+	DJNZ R6,L1_5ms
+	RET
+	
+delay_2ms: MOV R6,#40
+	L1_2ms: CALL delay_50us
+	DJNZ R6,L1_5ms
+	RET
+	
+delay_50us: MOV R7,#25
+	DJNZ R7,$
+	RET
+	END
