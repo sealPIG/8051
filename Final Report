@@ -1,0 +1,240 @@
+//LCM1602 + PCF8574T I2C ??
+
+#include "reg51.h"
+
+sbit sda = P2^0;
+sbit scl = P2^1;
+
+sbit function = P2^2;
+
+sbit sensorRight = P2^5;
+sbit sensorLeft = P2^6;
+
+sbit led1 = P1^0;
+sbit led2 = P1^1;
+sbit led3 = P1^2;
+sbit led4 = P1^3;
+
+#define SLAVE 0x4E //LCM1602????
+
+void msDelay(unsigned int d){
+	unsigned int i = 0;
+	unsigned int j = 0;
+	for(i = 0;i<d;i++)
+		for(j=0;j<1257;j++);
+}
+
+void delay(unsigned int dl){
+ while (dl>0)
+  dl--;
+}
+
+void start(){
+ scl = 1;
+ delay(5);
+ sda = 1;
+ delay(5);
+ sda = 0;
+ delay(4);
+}
+
+void send_8bits(unsigned char strg){
+ unsigned char sf;
+ 
+ for (sf=0; sf<8; sf++){
+  scl = 0;
+  sda =(bit)(strg & (0x80>>sf));
+  delay(5);
+  scl = 1;
+  delay(4);
+ }
+ scl = 0;
+ delay(5);
+}
+
+void ack(void){
+ sda = 1; 
+ 
+ if(sda == 0){  
+  scl = 1;
+  delay(4);
+  scl = 0;
+  delay(5);
+ }
+}
+
+void stop(void){
+ sda = 0;
+ scl = 1;
+ delay(5);
+ sda = 1;
+}
+
+void WriteInst4bits(unsigned char inst_4b){
+ send_8bits(0x08);         //RS=0, RW=0
+ ack();
+ send_8bits(0x0C);         //EN=1
+ ack();
+ send_8bits((inst_4b&0xF0)+0x0C); //??D7-D4
+ ack();
+ send_8bits((inst_4b&0xF0)+0x08); //EN=0 ?????
+ ack();
+}
+
+void WriteInst(unsigned char inst){ 
+ send_8bits(0x08);         //RS=0, RW=0
+ ack();
+ send_8bits(0x0C);         //EN=1
+ ack();
+ send_8bits((inst&0xF0)+0x0C);
+ ack();
+ send_8bits((inst&0xF0)+0x08);
+ ack();
+ 
+ send_8bits(0x0C);         //EN=1
+ ack();
+ send_8bits((inst<<4)+0x0C); 
+ ack();
+ send_8bits((inst<<4)+0x08);    //EN=0 
+ ack();
+} 
+
+void WriteData(unsigned char data_){
+ send_8bits(0x09);         //RS=1, RW=0
+ ack();
+ send_8bits(0x0D);         //EN=1
+ ack();
+ send_8bits((data_&0xF0)+0x0D);
+ ack();
+ send_8bits((data_&0xF0)+0x09);  //EN=0
+ ack();
+ 
+ send_8bits(0x0D);         //EN=1
+ ack();
+ send_8bits((data_<<4)+0x0D);
+ ack();
+ send_8bits((data_<<4)+0x09);   //EN=0 
+ ack();
+} 
+
+void WriteString(unsigned char count, unsigned char MSG[]){
+ unsigned char sf;
+ unsigned char move = 0;
+ 
+ for (sf=0; sf<count; sf++)
+   WriteData(MSG[sf]);
+}
+
+void initial(void){
+ delay(15000);
+ 
+ start();
+ send_8bits(SLAVE);
+ ack();
+ 
+ WriteInst4bits(0x30);
+ 
+ delay(4100);
+ 
+ WriteInst4bits(0x30);
+ 
+ delay(100);
+
+ WriteInst4bits(0x30);
+ WriteInst4bits(0x20);
+  
+ WriteInst(0x28); //function set, DL(DB4)=0, N(DB3)=1, F(DB2)=0
+ WriteInst(0x08); //display off
+ WriteInst(0x01); //clear display
+ WriteInst(0x06); //entry mode
+ WriteInst(0x0E); //display ON, D(DB2)=1, C(DB1)=1, B(DB0)=0
+}
+void LCDStart(){	//start lcd
+	unsigned char MSG_1[] = "Program Start   ";
+	unsigned char MSG_2[] = "                ";
+	
+	initial();
+
+	WriteInst(0x80);
+	WriteString(sizeof(MSG_1)-1, MSG_1);
+
+	WriteInst(0xC0);
+	WriteString(sizeof(MSG_2)-1, MSG_2);
+}
+
+void LCDFunction(int number,unsigned long speed1){	//lcd output
+  unsigned char MSG_1[] = "The speed is:";
+  unsigned char MSG_2[] = "            cm/s";
+	
+	speed1 %= 1000000;
+  MSG_2[4] = (speed1/100000) + '0';
+	speed1 %= 100000;
+  MSG_2[5] = (speed1/10000) + '0';
+	speed1 %= 10000;
+  MSG_2[6] = (speed1/1000) + '0';
+	
+	MSG_2[7] = '.';
+	
+	speed1 %= 1000;
+  MSG_2[8] = (speed1/100) + '0';
+	speed1 %= 100;
+  MSG_2[9] = (speed1/10) + '0';
+  MSG_2[10] = (speed1%10) + '0';
+
+  initial();
+
+  WriteInst(0x80);
+  WriteString(sizeof(MSG_1)-1, MSG_1);
+ 
+  WriteInst(0xC0);
+  WriteString(sizeof(MSG_2)-1, MSG_2);
+}
+
+int dataStore[20];
+unsigned long time;
+
+void countTime(){
+	unsigned long counter = 0;
+	
+	led2 = 0;
+	while(sensorRight == 1);
+	led2 = 1;
+	
+	while(sensorLeft == 1){
+		msDelay(1);
+		counter++;
+	}
+	
+	led3 = 0;
+	while(function == 0);
+	led3 = 1;
+	
+	if(counter != 0)
+		time = (counter*10) / 155;
+}
+
+void main(){
+	unsigned long speed;
+	LCDStart();
+	time = 0;
+	
+	led1 = 1;
+	led2 = 1;
+	led3 = 1;
+	led4 = 1;
+	
+	while(1){
+		led1 = 0;
+		countTime();
+		led1 = 1;
+		
+		if(time != 0){
+			speed = 150000/time;
+		}
+		
+		LCDFunction(1,speed);
+		
+		while(function == 1);
+	}
+}
+
