@@ -1,0 +1,86 @@
+	; Constant
+	V_SP EQU 60H ; Stack
+	READY EQU 00H ; status to indicate if Data is ready
+	AD_DATA EQU 30H ; ADC data
+	
+	; 255 = 5V
+	; 0 = 0V
+	LV2 EQU 255 ; If data >= LV2, STOP
+	LV1 EQU 1 ; If data >= LV1, Keep going
+	; If LV1 > data, Max speed
+	
+	LED0 EQU P1.0 ; LED0
+	LED1 EQU P1.1 ; LED1
+	LED2 EQU P1.2 ; LED2
+	
+	ADC_DB EQU P2 ; Data bus of ADC
+	ADC_WR EQU P3.6 ; WR pin of ADC
+	ADC_RD EQU P3.7 ; RD pin of ADC
+	; Codes
+	ORG 0 ; reset vector
+	JMP main ;
+	ORG 3 ; int 0
+	JMP ISR_INT0 ;
+main:
+	; Initialization
+	MOV SP, #V_SP
+	SETB LED0 ; Set LED0 off
+	SETB LED1 ; Set LED1 off
+	SETB LED2 ; Set LED2 off
+	
+	SETB IT0 ; INT0 uses edge-driven
+	SETB EX0 ; Enable INT0 interrupt
+	SETB EA ; Enable interrupt
+	; Start Sampling
+	
+SAMPLE:
+	CLR ADC_WR ; Generate rising edge on WR line
+	SETB ADC_WR ;
+	CLR READY ; Data is not ready
+	JNB READY, $ ; Wait until data is ready
+	; Check data
+
+LOOP:
+	
+
+CHK_LV2: ; 5V
+	MOV A, AD_DATA
+	CLR C ; Check if A >= LV2
+	SUBB A, #LV2
+	
+	JC CHK_LV1
+	
+	CLR LED0
+	SETB LED1
+	CLR LED2
+	
+	AJMP END_CHK
+	
+CHK_LV1: ; Between 5V ~ 0V
+	MOV A, AD_DATA
+	CLR C
+	SUBB A, #LV1
+	
+	JC CHK_ELSE
+	
+	SETB LED0
+	SETB LED1
+	CLR LED2
+	
+	AJMP END_CHK
+
+CHK_ELSE: ; 0V
+	CLR LED0
+	CLR LED1
+	CLR LED2
+	
+END_CHK: 
+	AJMP SAMPLE
+	; Read ADC result
+ISR_INT0:
+	CLR ADC_RD ; Set RD = low
+	MOV AD_DATA, ADC_DB ; Get data
+	SETB ADC_RD ; ADC RD = high
+	SETB READY ; Data is ready
+	RETI
+	END
